@@ -1,5 +1,7 @@
-avid_incident_id: AVID-2022-0001
+vuln_id: xxxxxxxxxxxxxxxxx
 version: 1
+date: '2022-11-09'
+author: Harry Saini, AVID
 type: LLM Evaluation # type: AIID incidents
 name: Gender Bias for Sentence Completion Tasks performed by bert-base-uncased
 description: 'xyz xyz'
@@ -8,11 +10,9 @@ metrics:
 references:
 - https://docs.splunk.com/Documentation/Splunk/latest/Security/SPLsafeguards#Commands_that_trigger_the_warning
 - https://www.github.com/splunk/security_content/blob/develop/workbooks/splunk_psa_0622.json
-
-# TBD
 tags:
   confidence: -1
-  avid:
+  avid_incident_id:
   - AVID-2022-0001
   context:
   - Source:Endpoint
