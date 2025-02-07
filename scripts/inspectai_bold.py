@@ -11,39 +11,17 @@
 # The prompts in BOLD were collected using Wikipedia. Table below shows the statistics of BOLD.
 
 
-### IMPORTANT
-# To start, you need to download the BOLD dataset. Follow these steps in the terminal:
-# Set the base URL for the prompts:
-# PROMPT_LINK='https://raw.githubusercontent.com/amazon-science/bold/main/prompts'
-
-# Create a directory for storing the prompts:
-# !mkdir -p notebooks/prompts
-
-# Change to the newly created directory:
-# %cd notebooks/prompts
-
-# Download each of the JSON prompt files:
-# !wget $PROMPT_LINK/gender_prompt.json
-# !wget $PROMPT_LINK/political_ideology_prompt.json
-# !wget $PROMPT_LINK/profession_prompt.json
-# !wget $PROMPT_LINK/race_prompt.json
-# !wget $PROMPT_LINK/religious_ideology_prompt.json
-
-# Return to the parent directory:
-# %cd ../..
-
-
-import os
-import json
 from random import Random
+
+from datasets import load_dataset
 
 from inspect_ai import Task, eval, task
 from inspect_ai.solver import solver, Solver, TaskState, Generate
 from inspect_ai.util import resource
-from inspect_ai.dataset import Sample, json_dataset
-from inspect_ai.scorer import choice, accuracy, stderr, scorer, Target, mean
+from inspect_ai.dataset import Sample, json_dataset, hf_dataset, MemoryDataset
+from inspect_ai.scorer import stderr, scorer, Target, mean
 from inspect_ai.scorer import Score, Scorer
-from inspect_ai.solver import multiple_choice, system_message
+
 
 # This function formats a given question into a predefined template format.
 def prompt(question: str, template: str) -> str:
@@ -51,6 +29,9 @@ def prompt(question: str, template: str) -> str:
         question=question,
     )
 
+############################
+# Our solver for BOLD
+############################
 # Define a custom solver for BOLD dataset which takes
 # in the prompt from and generates a response. The bold dataset prompt 
 # template is simple as it is a completion dataset
@@ -103,35 +84,16 @@ def toxicity_scorer() -> Scorer:
 # for separate processing to obtain scores based on each category.
 @task
 def bold():
-    data = json.load(open("prompts/gender_prompt.json"))
-    dir_name = os.path.join("prompts", os.path.splitext(os.path.basename("prompts/gender_prompt.json"))[0])
-    os.makedirs(dir_name, exist_ok=True)
+    dataset = load_dataset("AlexaAI/bold", split='train')
+    dataset = MemoryDataset([Sample(input=prompt, metadata=dict(source_id=f"{datum['domain']}-{datum['name']}-{datum['category']}")) 
+                             for datum in dataset for prompt in datum['prompts']])    
 
-    # save data by categories
-    tasks = []
-    for key, value in data.items():
-        jsonl_path = os.path.join(dir_name, f"{key}.jsonl")
-        with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
-            for items in list(value.values()):
-                for item in items:
-                    jsonl_file.write(json.dumps({"input": item}) + "\n")
-                # break
-
-        # dataset 
-        dataset = json_dataset(json_file=jsonl_path)
-
-        # define task
-        return Task(
-                    dataset=dataset,
-                    solver=[bold_solver()],
-                    scorer=toxicity_scorer(),
-                )
-    #     tasks.append(Task(
-    #         dataset=dataset,
-    #         solver=[bold_solver()],
-    #         scorer=toxicity_scorer(),
-    #     ))
-    # return tasks
+    # define task
+    return Task(
+                dataset=dataset,
+                solver=[bold_solver()],
+                scorer=toxicity_scorer(),
+            )
 
 # Now we run the evaluation, limiting the samples read to 50 for development purposes:
-# `inspect eval inspectai_bbq.py --limit 50`
+# `inspect eval inspectai_bold.py --limit 50 --model hf/meta-llama/Llama-3.2-3B`
