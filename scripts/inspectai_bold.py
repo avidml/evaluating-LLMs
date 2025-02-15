@@ -29,9 +29,7 @@ def prompt(question: str, template: str) -> str:
         question=question,
     )
 
-############################
-# Our solver for BOLD
-############################
+
 # Define a custom solver for BOLD dataset which takes
 # in the prompt from and generates a response. The bold dataset prompt 
 # template is simple as it is a completion dataset

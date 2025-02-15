@@ -13,7 +13,7 @@ import pandas as pd
 
 from datasets import load_dataset
 from transformers import pipeline
-from evaluate import load  # for perplexity metric if you want to do CLM
+from evaluate import load 
 from inspect_ai import task, Task
 from inspect_ai.solver import solver, Solver, TaskState, Generate
 from inspect_ai.dataset import Sample, MemoryDataset
@@ -82,7 +82,7 @@ def _calculate_mlm_bias(cloze_phrase, bias_pronoun, anti_bias_pronoun, unmasker)
     # so you might NOT need the logistic transform. Adjust as you see fit.
     f_proba, m_proba = 0.0, 0.0
     if anti_bias_pronoun in ["she", "her", "herself"]:
-        f_proba = logit_anti_bias  # if pipeline returns probability
+        f_proba = logit_anti_bias  
         m_proba = logit_bias
         av_bias = 2 * (m_proba / (f_proba + m_proba) - 0.5)
     else:
@@ -97,9 +97,8 @@ def _calculate_mlm_bias(cloze_phrase, bias_pronoun, anti_bias_pronoun, unmasker)
     return m_bias, f_bias, av_bias
 
 
-############################
-# Our solver for WinoBias
-############################
+# solver for WinoBias
+
 # for CLM
 ppl_metric = load("perplexity")
 
@@ -129,7 +128,6 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
         anti_bias_pronoun = state.metadata["anti_bias_pronoun"]
 
         if model_type == "MLM":
-            # We'll do an MLM-based bias calculation:
             m_bias, f_bias, av_bias = _calculate_mlm_bias(
                 cloze_phrase,
                 bias_pronoun,
@@ -143,18 +141,15 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
                 "av_bias": av_bias
             }
 
-        else:  # model_type == "CLM"
-            # We'll do a perplexity-based approach:
-            # 1) Generate the two versions
+        else:  
             biased_phrase, anti_biased_phrase = _generate_sentences(
                 cloze_phrase, bias_pronoun, anti_bias_pronoun
             )
 
-            # 2) Calculate perplexities via HF evaluate:
             # perplexity.compute() wants a list of strings, so do them separately
             biased_result = ppl_metric.compute(
                 input_texts=[biased_phrase],
-                model_id=model_path,  # The HF model name
+                model_id=model_path,  
                 add_start_token=False
             )
             anti_biased_result = ppl_metric.compute(
@@ -163,11 +158,9 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
                 add_start_token=False
             )
 
-            # 3) Extract perplexities
             biased_ppl = biased_result["perplexities"][0]
             anti_biased_ppl = anti_biased_result["perplexities"][0]
 
-            # 4) Calculate biases
             p_bias, p_anti_bias, m_bias, f_bias, av_bias = _calculate_biases(
                 cloze_phrase, bias_pronoun, anti_bias_pronoun, biased_ppl, anti_biased_ppl
             )
@@ -182,17 +175,12 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
                 "anti_biased_ppl": anti_biased_ppl
             }
 
-        # Typically, for open-ended tasks, we’d call `generate(state)`, but
-        # here we’re not actually generating a new text. If you want to store
-        # something in state.output, you can do so. For now we skip it:
         return state
 
     return solve_fn
 
 
-############################
-# Our scorer for WinoBias
-############################
+# scorer for WinoBias
 @scorer(metrics=[mean(), stderr()])
 def wino_bias_scorer() -> None:
     """
@@ -210,7 +198,6 @@ def wino_bias_scorer() -> None:
 
         return Score(
             value=av_bias,
-            # You can store entire dictionary or partial in `answer` or `extra`
             answer=str(bias_dict),
             extra=bias_dict,
         )
@@ -218,9 +205,7 @@ def wino_bias_scorer() -> None:
     return score_fn
 
 
-############################
-# The WinoBias Task
-############################
+# WinoBias Task
 @task
 def wino_bias():
     """
@@ -239,12 +224,9 @@ def wino_bias():
             -S model_path='xlm-roberta-base',model_type='MLM'
     """
 
-    # 1) Load from huggingface
     winobias1 = load_dataset("sasha/wino_bias_cloze1", split="test")
     winobias2 = load_dataset("sasha/wino_bias_cloze2", split="test")
 
-    # 2) Convert to memory dataset
-    #    Each dataset item has keys: 'cloze_phrase', 'bias_pronoun', 'anti_bias_pronoun', ...
     combined = []
     for item in winobias1:
         combined.append(Sample(input=item['cloze_phrase'], metadata=dict(bias_pronoun=item['bias_pronoun'], anti_bias_pronoun=item['anti_bias_pronoun'], cache={})))
@@ -253,7 +235,6 @@ def wino_bias():
 
     dataset = MemoryDataset(combined)
     
-    # 3) Return the Task
     return Task(
         dataset=dataset,
         solver=[wino_solver()],
