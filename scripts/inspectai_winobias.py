@@ -35,7 +35,6 @@ def _calculate_biases(cloze_phrase, bias_pronoun, anti_bias_pronoun, biased_ppl,
     Given perplexities for biased vs. anti-biased versions,
     compute the probabilities and the final bias metrics.
     """
-    # The code below is directly adapted from your snippet:
     num_tokens = len(cloze_phrase.split())
     p_bias = math.pow(1 / biased_ppl, num_tokens)
     p_anti_bias = math.pow(1 / anti_biased_ppl, num_tokens)
@@ -109,7 +108,6 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
     a perplexity-based approach (for CLM) and computes the WinoBias metrics
     for each sample. We store the results in state.metadata["cache"] for the scorer.
     """
-
     # Prepare pipeline if MLM:
     unmasker = None
     if model_type == "MLM":
@@ -138,7 +136,9 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
             state.metadata["cache"]["wino_bias"] = {
                 "m_bias": m_bias,
                 "f_bias": f_bias,
-                "av_bias": av_bias
+                "av_bias": av_bias, 
+                "biased_answer": bias_pronoun,
+                "anti_biased_answer": anti_bias_pronoun,
             }
 
         else:  
@@ -148,12 +148,12 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
 
             # perplexity.compute() wants a list of strings, so do them separately
             biased_result = ppl_metric.compute(
-                input_texts=[biased_phrase],
+                predictions=[biased_phrase],
                 model_id=model_path,  
                 add_start_token=False
             )
             anti_biased_result = ppl_metric.compute(
-                input_texts=[anti_biased_phrase],
+                predictions=[anti_biased_phrase],
                 model_id=model_path,
                 add_start_token=False
             )
@@ -172,7 +172,9 @@ def wino_solver(model_path: str = "xlm-roberta-base", model_type: str = "MLM") -
                 "p_bias": p_bias,
                 "p_anti_bias": p_anti_bias,
                 "biased_ppl": biased_ppl,
-                "anti_biased_ppl": anti_biased_ppl
+                "anti_biased_ppl": anti_biased_ppl,
+                "biased_answer": biased_phrase,
+                "anti_biased_answer": anti_biased_phrase,
             }
 
         return state
@@ -193,13 +195,14 @@ def wino_bias_scorer() -> None:
 
     async def score_fn(state: TaskState, target: Target) -> Score:
         bias_dict = state.metadata["cache"].get("wino_bias", {})
+        answer_dict = {"biased_answer": bias_dict.get("biased_answer", ""),
+                     "anti_biased_answer": bias_dict.get("anti_biased_answer", "")}
         # We'll treat the 'av_bias' as the main numeric "value".
         av_bias = bias_dict.get("av_bias", 0.0)
 
         return Score(
             value=av_bias,
-            answer=str(bias_dict),
-            extra=bias_dict,
+            answer=str(answer_dict),
         )
 
     return score_fn
@@ -207,7 +210,7 @@ def wino_bias_scorer() -> None:
 
 # WinoBias Task
 @task
-def wino_bias():
+def wino_bias(model_path: str = "xlm-roberta-base", model_type: str = "MLM"):
     """
     Loads the WinoBias Cloze1 and Cloze2 from Hugging Face and
     merges them into a single dataset for evaluation.
@@ -216,12 +219,6 @@ def wino_bias():
         - the dataset in MemoryDataset format
         - our solver (wino_solver)
         - our scorer (wino_bias_scorer)
-
-    Example usage:
-        inspect eval inspectai_winobias.py \
-            --limit 10 \
-            --model hf/xlm-roberta-base
-            -S model_path='xlm-roberta-base',model_type='MLM'
     """
 
     winobias1 = load_dataset("sasha/wino_bias_cloze1", split="test")
@@ -237,6 +234,9 @@ def wino_bias():
     
     return Task(
         dataset=dataset,
-        solver=[wino_solver()],
+        solver=[wino_solver(model_path, model_type)],
         scorer=wino_bias_scorer(),
     )
+
+# Now we run the evaluation, limiting the samples read to 50 for development purposes:
+# inspect eval scripts/inspectai_winobias.py --limit 50 --model hf/EleutherAI/pythia-160m -T model_type=CLM -T model_path=EleutherAI/pythia-160m

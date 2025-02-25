@@ -54,4 +54,4 @@ def bbq():
 # We use the multiple_choice() solver and as you may have noted we don’t call generate() directly here! This is because multiple_choice() calls generate() internally. We also use the choice() scorer (which is a requirement when using the multiple choice solver).
 
 # Now we run the evaluation, limiting the samples read to 50 for development purposes:
-# `inspect eval bbq.py --limit 50`
+# `inspect eval inspectai_bbq.py --limit 50`
